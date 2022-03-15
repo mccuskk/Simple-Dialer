@@ -1,10 +1,15 @@
 package com.simplemobiletools.dialer.activities
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.SearchManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
@@ -18,7 +23,10 @@ import android.provider.Settings
 import android.telephony.PhoneNumberUtils
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.Toast
 import androidx.appcompat.widget.SearchView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.MenuItemCompat
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.snackbar.Snackbar
@@ -50,18 +58,71 @@ import com.simplemobiletools.dialer.activities.SimpleActivity
 import com.simplemobiletools.commons.dialogs.RadioGroupDialog
 import com.simplemobiletools.commons.models.RadioItem
 import com.simplemobiletools.commons.models.SimpleContact
+import com.simplemobiletools.dialer.BLECommService
+import com.simplemobiletools.dialer.helpers.TAB_CATI
 import java.util.*
+
+private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
+private const val LOCATION_PERMISSION_REQUEST_CODE = 2
+
+fun Context.hasPermission(permissionType: String): Boolean {
+    return ContextCompat.checkSelfPermission(this, permissionType) ==
+        PackageManager.PERMISSION_GRANTED
+}
+
+private fun Activity.requestPermission(permission: String, requestCode: Int) {
+    ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
+}
 
 class MainActivity : SimpleActivity() {
     lateinit var client: Mqtt5AsyncClient
+    lateinit var bluetoothAdapterName: String
     private var isSearchOpen = false
     private var launchedDialer = false
     private var searchMenuItem: MenuItem? = null
     private var storedShowTabs = 0
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
+                                            grantResults: IntArray) {
+        when (requestCode) {
+            1 -> {
+                if (grantResults.isNotEmpty() && grantResults[0] ==
+                    PackageManager.PERMISSION_GRANTED) {
+                    if ((ContextCompat.checkSelfPermission(this@MainActivity,
+                            Manifest.permission.ACCESS_FINE_LOCATION) ==
+                            PackageManager.PERMISSION_GRANTED)) {
+                        Toast.makeText(this, "Permission Granted", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+        }
+    }
+
+    private val bluetoothAdapter: BluetoothAdapter by lazy {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothManager.adapter
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        if (ContextCompat.checkSelfPermission(this@MainActivity,
+                Manifest.permission.ACCESS_FINE_LOCATION) !=
+            PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this@MainActivity,
+                    Manifest.permission.ACCESS_FINE_LOCATION)) {
+                ActivityCompat.requestPermissions(this@MainActivity,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+            } else {
+                ActivityCompat.requestPermissions(this@MainActivity,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
+            }
+        }
+
         appLaunched(BuildConfig.APPLICATION_ID)
         setupTabColors()
 
@@ -82,6 +143,10 @@ class MainActivity : SimpleActivity() {
         } else {
             launchSetDefaultDialerIntent()
         }
+
+        val serviceIntent = Intent(this, BLECommService::class.java)
+        ContextCompat.startForegroundService(this, serviceIntent)
+        bluetoothAdapterName = "${BluetoothAdapter.getDefaultAdapter().name}"
 
         asyncClient()
         hideTabs()
@@ -174,6 +239,13 @@ class MainActivity : SimpleActivity() {
             initFragments()
         }
     }
+    private fun promptEnableBluetooth() {
+        if (!bluetoothAdapter.isEnabled) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            startActivityForResult(enableBtIntent, ENABLE_BLUETOOTH_REQUEST_CODE)
+        }
+    }
+
 
     private fun setupSearch(menu: Menu) {
         val searchManager = getSystemService(Context.SEARCH_SERVICE) as SearchManager
@@ -425,17 +497,17 @@ class MainActivity : SimpleActivity() {
         return when (config.defaultTab) {
             TAB_LAST_USED -> if (config.lastUsedViewPagerPage < main_tabs_holder.tabCount) config.lastUsedViewPagerPage else 0
             TAB_CONTACTS -> 0
-            TAB_FAVORITES -> if (showTabsMask and TAB_CONTACTS > 0) 1 else 0
+            TAB_CATI -> if (showTabsMask and TAB_CONTACTS > 0) 1 else 0
             else -> {
                 if (showTabsMask and TAB_CALL_HISTORY > 0) {
                     if (showTabsMask and TAB_CONTACTS > 0) {
-                        if (showTabsMask and TAB_FAVORITES > 0) {
+                        if (showTabsMask and TAB_CATI > 0) {
                             2
                         } else {
                             1
                         }
                     } else {
-                        if (showTabsMask and TAB_FAVORITES > 0) {
+                        if (showTabsMask and TAB_CATI > 0) {
                             1
                         } else {
                             0
@@ -498,18 +570,16 @@ class MainActivity : SimpleActivity() {
             .applySimpleAuth()
             .addDisconnectedListener(object : MqttClientDisconnectedListener {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
-                    println("ConnectionCallback.onDisconnected")
+                    TODO("Set Disconnected State")
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
                 override fun onConnected(context: MqttClientConnectedContext) {
-                    println("ConnectionCallback.onConnected")
                     client.subscribeWith()
-                        .topicFilter("test")
+                        .topicFilter("${bluetoothAdapterName}/dial")
                         .qos(MqttQos.EXACTLY_ONCE)
                         .callback {
                             val phone = PhoneNumberUtils.formatNumber(it.payloadAsBytes.decodeToString(),Locale.getDefault().country)
-                            println(phone)
                             this@MainActivity.launchCallIntent(phone)
                         }
                         .send()
