@@ -94,4 +94,7 @@
         Haven't found some strings? There's more at
         https://github.com/SimpleMobileTools/Simple-Commons/tree/master/commons/src/main/res
     -->
+    <!-- Contacts -->
+    <string name="cati_tab">CATI</string>
+    <string name="bluetooth_name" />
 </resources>

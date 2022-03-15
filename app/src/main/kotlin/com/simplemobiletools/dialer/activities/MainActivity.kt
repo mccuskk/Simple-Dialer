@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.provider.CallLog
 import android.provider.Settings
+import android.telephony.PhoneNumberUtils
 import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.widget.SearchView
@@ -35,11 +36,24 @@ import com.simplemobiletools.dialer.helpers.RecentsHelper
 import com.simplemobiletools.dialer.helpers.tabsList
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.fragment_contacts.*
+import kotlinx.android.synthetic.main.fragment_cati.*
 import kotlinx.android.synthetic.main.fragment_favorites.*
 import kotlinx.android.synthetic.main.fragment_recents.*
+import com.hivemq.client.mqtt.datatypes.MqttQos
+import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedContext
+import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedListener
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext
+import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener
+import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
+import com.hivemq.client.mqtt.mqtt5.Mqtt5Client
+import com.simplemobiletools.dialer.activities.SimpleActivity
+import com.simplemobiletools.commons.dialogs.RadioGroupDialog
+import com.simplemobiletools.commons.models.RadioItem
+import com.simplemobiletools.commons.models.SimpleContact
 import java.util.*
 
 class MainActivity : SimpleActivity() {
+    lateinit var client: Mqtt5AsyncClient
     private var isSearchOpen = false
     private var launchedDialer = false
     private var searchMenuItem: MenuItem? = null
@@ -69,6 +83,7 @@ class MainActivity : SimpleActivity() {
             launchSetDefaultDialerIntent()
         }
 
+        asyncClient()
         hideTabs()
     }
 
@@ -349,7 +364,7 @@ class MainActivity : SimpleActivity() {
     private fun getTabContentDescription(position: Int): String {
         val stringId = when (position) {
             0 -> R.string.contacts_tab
-            1 -> R.string.favorites_tab
+            1 -> R.string.cati_tab
             else -> R.string.call_history_tab
         }
 
@@ -393,7 +408,7 @@ class MainActivity : SimpleActivity() {
         }
 
         if (showTabs and TAB_FAVORITES > 0) {
-            fragments.add(favorites_fragment)
+            fragments.add(cati_fragment)
         }
 
         if (showTabs and TAB_CALL_HISTORY > 0) {
@@ -467,5 +482,44 @@ class MainActivity : SimpleActivity() {
         )
 
         startAboutActivity(R.string.app_name, licenses, BuildConfig.VERSION_NAME, faqItems, true)
+    }
+
+    fun asyncClient(): Mqtt5AsyncClient {
+
+        client = Mqtt5Client.builder()
+            .identifier(UUID.randomUUID().toString())
+            .serverHost("mqtt.kwest.co")
+            .serverPort(8883)
+            .sslWithDefaultConfig()
+            .automaticReconnectWithDefaultConfig()
+            .simpleAuth()
+            .username("cati")
+            .password("st0ptk1dz".toByteArray())
+            .applySimpleAuth()
+            .addDisconnectedListener(object : MqttClientDisconnectedListener {
+                override fun onDisconnected(context: MqttClientDisconnectedContext) {
+                    println("ConnectionCallback.onDisconnected")
+                }
+            })
+            .addConnectedListener(object : MqttClientConnectedListener {
+                override fun onConnected(context: MqttClientConnectedContext) {
+                    println("ConnectionCallback.onConnected")
+                    client.subscribeWith()
+                        .topicFilter("test")
+                        .qos(MqttQos.EXACTLY_ONCE)
+                        .callback {
+                            val phone = PhoneNumberUtils.formatNumber(it.payloadAsBytes.decodeToString(),Locale.getDefault().country)
+                            println(phone)
+                            this@MainActivity.launchCallIntent(phone)
+                        }
+                        .send()
+                }
+            })
+            .buildAsync()
+
+        client.connectWith()
+            .send()
+
+        return client
     }
 }
