@@ -6,9 +6,7 @@ import android.app.Activity
 import android.app.SearchManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.content.ContentValues
-import android.content.Context
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.res.Configuration
@@ -20,6 +18,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.provider.CallLog
 import android.provider.Settings
+import android.telecom.Call
 import android.telephony.PhoneNumberUtils
 import android.view.Menu
 import android.view.MenuItem
@@ -30,23 +29,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.MenuItemCompat
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.snackbar.Snackbar
-import com.simplemobiletools.commons.dialogs.ConfirmationDialog
-import com.simplemobiletools.commons.extensions.*
-import com.simplemobiletools.commons.helpers.*
-import com.simplemobiletools.commons.models.FAQItem
-import com.simplemobiletools.dialer.BuildConfig
-import com.simplemobiletools.dialer.R
-import com.simplemobiletools.dialer.adapters.ViewPagerAdapter
-import com.simplemobiletools.dialer.extensions.config
-import com.simplemobiletools.dialer.fragments.MyViewPagerFragment
-import com.simplemobiletools.dialer.helpers.OPEN_DIAL_PAD_AT_LAUNCH
-import com.simplemobiletools.dialer.helpers.RecentsHelper
-import com.simplemobiletools.dialer.helpers.tabsList
-import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.android.synthetic.main.fragment_contacts.*
-import kotlinx.android.synthetic.main.fragment_cati.*
-import kotlinx.android.synthetic.main.fragment_favorites.*
-import kotlinx.android.synthetic.main.fragment_recents.*
 import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedContext
 import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedListener
@@ -54,12 +36,25 @@ import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext
 import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5Client
-import com.simplemobiletools.dialer.activities.SimpleActivity
-import com.simplemobiletools.commons.dialogs.RadioGroupDialog
-import com.simplemobiletools.commons.models.RadioItem
-import com.simplemobiletools.commons.models.SimpleContact
+import com.simplemobiletools.commons.dialogs.ConfirmationDialog
+import com.simplemobiletools.commons.extensions.*
+import com.simplemobiletools.commons.helpers.*
+import com.simplemobiletools.commons.models.FAQItem
 import com.simplemobiletools.dialer.BLECommService
+import com.simplemobiletools.dialer.BuildConfig
+import com.simplemobiletools.dialer.R
+import com.simplemobiletools.dialer.adapters.ViewPagerAdapter
+import com.simplemobiletools.dialer.extensions.config
+import com.simplemobiletools.dialer.fragments.MyViewPagerFragment
+import com.simplemobiletools.dialer.helpers.OPEN_DIAL_PAD_AT_LAUNCH
+import com.simplemobiletools.dialer.helpers.RecentsHelper
 import com.simplemobiletools.dialer.helpers.TAB_CATI
+import com.simplemobiletools.dialer.helpers.tabsList
+import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.fragment_cati.*
+import kotlinx.android.synthetic.main.fragment_contacts.*
+import kotlinx.android.synthetic.main.fragment_favorites.*
+import kotlinx.android.synthetic.main.fragment_recents.*
 import java.util.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
@@ -77,6 +72,9 @@ private fun Activity.requestPermission(permission: String, requestCode: Int) {
 class MainActivity : SimpleActivity() {
     lateinit var client: Mqtt5AsyncClient
     lateinit var bluetoothAdapterName: String
+    lateinit var answeredReceiver: BroadcastReceiver
+    lateinit var disconnectedReceiver: BroadcastReceiver
+
     private var isSearchOpen = false
     private var launchedDialer = false
     private var searchMenuItem: MenuItem? = null
@@ -84,6 +82,8 @@ class MainActivity : SimpleActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
                                             grantResults: IntArray) {
+
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
             1 -> {
                 if (grantResults.isNotEmpty() && grantResults[0] ==
@@ -146,7 +146,40 @@ class MainActivity : SimpleActivity() {
 
         val serviceIntent = Intent(this, BLECommService::class.java)
         ContextCompat.startForegroundService(this, serviceIntent)
+
         bluetoothAdapterName = "${BluetoothAdapter.getDefaultAdapter().name}"
+        promptEnableBluetooth()
+
+        val answeredFilter = IntentFilter()
+        //adding some filters
+        answeredFilter.addAction("co.kwest.www.callmanager.answered")
+        answeredReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                // Signal the call has been answered
+                val state = intent.getIntExtra("state", -1)
+
+                if (state == Call.STATE_ACTIVE) {
+                    client.publishWith()
+                        .topic("${bluetoothAdapterName}/answered")
+                        .send()
+                }
+            }
+        }
+        registerReceiver(answeredReceiver, answeredFilter)
+
+        val disconnectedFilter = IntentFilter()
+        //adding some filters
+        disconnectedFilter.addAction("co.kwest.www.callmanager.disconnected")
+        disconnectedReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                // End the call
+                client.publishWith()
+                    .topic("${bluetoothAdapterName}/answered")
+                    .payload("disconnected".encodeToByteArray())
+                    .send()
+            }
+        }
+        registerReceiver(disconnectedReceiver, disconnectedFilter)
 
         asyncClient()
         hideTabs()
@@ -576,11 +609,21 @@ class MainActivity : SimpleActivity() {
             .addConnectedListener(object : MqttClientConnectedListener {
                 override fun onConnected(context: MqttClientConnectedContext) {
                     client.subscribeWith()
-                        .topicFilter("${bluetoothAdapterName}/dial")
+                        .topicFilter("${bluetoothAdapterName}/call")
                         .qos(MqttQos.EXACTLY_ONCE)
                         .callback {
-                            val phone = PhoneNumberUtils.formatNumber(it.payloadAsBytes.decodeToString(),Locale.getDefault().country)
-                            this@MainActivity.launchCallIntent(phone)
+                             val phone = PhoneNumberUtils.formatNumber(it.payloadAsBytes.decodeToString(), Locale.getDefault().country)
+                             this@MainActivity.launchCallIntent(phone)
+                        }
+                        .send()
+
+                    client.subscribeWith()
+                        .topicFilter("${bluetoothAdapterName}/hangup")
+                        .qos(MqttQos.EXACTLY_ONCE)
+                        .callback {
+                            val intent = Intent()
+                            intent.action = "co.kwest.www.callmanager.hangup"
+                            this@MainActivity.sendBroadcast(intent)
                         }
                         .send()
                 }

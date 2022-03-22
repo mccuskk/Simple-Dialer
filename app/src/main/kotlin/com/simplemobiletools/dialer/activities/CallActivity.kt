@@ -2,8 +2,10 @@ package com.simplemobiletools.dialer.activities
 
 import android.annotation.SuppressLint
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
@@ -41,6 +43,8 @@ class CallActivity : SimpleActivity() {
         }
     }
 
+    lateinit var hangupReceiver: BroadcastReceiver
+
     private var isSpeakerOn = false
     private var isMicrophoneOn = true
     private var isCallEnded = false
@@ -75,6 +79,18 @@ class CallActivity : SimpleActivity() {
 
         CallManager.registerCallback(callCallback)
         updateCallState(CallManager.getState())
+
+        val hangupFilter = IntentFilter()
+        //adding some filters
+        hangupFilter.addAction("co.kwest.www.callmanager.hangup")
+        hangupReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                // End the call
+                endCall(true)
+            }
+        }
+        registerReceiver(hangupReceiver, hangupFilter)
+
     }
 
     override fun onDestroy() {
@@ -407,8 +423,9 @@ class CallActivity : SimpleActivity() {
         }
     }
 
-    private fun endCall() {
+    private fun endCall( isHangup: Boolean = false) {
         CallManager.reject()
+
         if (proximityWakeLock?.isHeld == true) {
             proximityWakeLock!!.release()
         }
@@ -435,12 +452,24 @@ class CallActivity : SimpleActivity() {
             call_status_label.text = getString(R.string.call_ended)
             finish()
         }
+
+        if (!isHangup) {
+            val intent = Intent()
+            intent.action = "co.kwest.www.callmanager.disconnected"
+            sendBroadcast(intent)
+        }
     }
 
     private val callCallback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
             super.onStateChanged(call, state)
             updateCallState(state)
+            val intent = Intent()
+
+            intent.action = "co.kwest.www.callmanager.answered"
+            intent.putExtra("state", state)
+            this@CallActivity.sendBroadcast(intent)
+
         }
     }
 

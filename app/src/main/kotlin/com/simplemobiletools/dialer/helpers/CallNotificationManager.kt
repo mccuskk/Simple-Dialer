@@ -10,6 +10,7 @@ import android.content.Intent
 import android.telecom.Call
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.simplemobiletools.commons.extensions.notificationManager
 import com.simplemobiletools.commons.extensions.setText
 import com.simplemobiletools.commons.extensions.setVisibleIf
