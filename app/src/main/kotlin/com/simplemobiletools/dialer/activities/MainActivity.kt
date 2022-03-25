@@ -599,7 +599,7 @@ class MainActivity : SimpleActivity() {
             .automaticReconnectWithDefaultConfig()
             .simpleAuth()
             .username("cati")
-            .password("st0ptk1dz".toByteArray())
+            .password("3317b699-585c-49eb-8708-aa9700dd66f3".toByteArray())
             .applySimpleAuth()
             .addDisconnectedListener(object : MqttClientDisconnectedListener {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
