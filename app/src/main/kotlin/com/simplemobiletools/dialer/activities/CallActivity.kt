@@ -18,6 +18,7 @@ import android.telecom.CallAudioState
 import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.ImageView
+import androidx.appcompat.content.res.AppCompatResources
 import com.simplemobiletools.commons.extensions.*
 import com.simplemobiletools.commons.helpers.MINUTE_SECONDS
 import com.simplemobiletools.commons.helpers.isOreoMr1Plus
@@ -33,6 +34,7 @@ import com.simplemobiletools.dialer.helpers.CallManager
 import com.simplemobiletools.dialer.models.CallContact
 import kotlinx.android.synthetic.main.activity_call.*
 import kotlinx.android.synthetic.main.dialpad.*
+import kotlinx.coroutines.*
 
 class CallActivity : SimpleActivity() {
     companion object {
@@ -86,7 +88,7 @@ class CallActivity : SimpleActivity() {
         hangupReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // End the call
-                endCall(true)
+                endCall()
             }
         }
         registerReceiver(hangupReceiver, hangupFilter)
@@ -423,7 +425,7 @@ class CallActivity : SimpleActivity() {
         }
     }
 
-    private fun endCall( isHangup: Boolean = false) {
+    private fun endCall() {
         CallManager.reject()
 
         if (proximityWakeLock?.isHeld == true) {
@@ -453,10 +455,20 @@ class CallActivity : SimpleActivity() {
             finish()
         }
 
-        if (!isHangup) {
+        GlobalScope.launch { signalWhenReady() }
+    }
+
+    suspend fun signalWhenReady() {
+        withContext(Dispatchers.Default) {
+            var slept = 250
+            while (CallManager.getState() != Call.STATE_DISCONNECTED) {
+                slept += 250
+                delay(250L)
+            }
+            delay(250L)
             val intent = Intent()
-            intent.action = "co.kwest.www.callmanager.disconnected"
-            sendBroadcast(intent)
+            intent.action = "co.kwest.www.callmanager.ready"
+            this@CallActivity.sendBroadcast(intent)
         }
     }
 

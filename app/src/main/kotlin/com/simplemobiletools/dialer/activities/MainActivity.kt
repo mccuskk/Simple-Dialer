@@ -73,7 +73,7 @@ class MainActivity : SimpleActivity() {
     lateinit var client: Mqtt5AsyncClient
     lateinit var bluetoothAdapterName: String
     lateinit var answeredReceiver: BroadcastReceiver
-    lateinit var disconnectedReceiver: BroadcastReceiver
+    lateinit var readyReceiver: BroadcastReceiver
 
     private var isSearchOpen = false
     private var launchedDialer = false
@@ -160,26 +160,27 @@ class MainActivity : SimpleActivity() {
 
                 if (state == Call.STATE_ACTIVE) {
                     client.publishWith()
-                        .topic("${bluetoothAdapterName}/answered")
+                        .topic("${bluetoothAdapterName}/phone")
+                        .payload("answered".encodeToByteArray())
                         .send()
                 }
             }
         }
         registerReceiver(answeredReceiver, answeredFilter)
 
-        val disconnectedFilter = IntentFilter()
+        val readyFilter = IntentFilter()
         //adding some filters
-        disconnectedFilter.addAction("co.kwest.www.callmanager.disconnected")
-        disconnectedReceiver = object : BroadcastReceiver() {
+        readyFilter.addAction("co.kwest.www.callmanager.ready")
+        readyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // End the call
                 client.publishWith()
-                    .topic("${bluetoothAdapterName}/answered")
-                    .payload("disconnected".encodeToByteArray())
+                    .topic("${bluetoothAdapterName}/phone")
+                    .payload("ready".encodeToByteArray())
                     .send()
             }
         }
-        registerReceiver(disconnectedReceiver, disconnectedFilter)
+        registerReceiver(readyReceiver, readyFilter)
 
         asyncClient()
         hideTabs()
