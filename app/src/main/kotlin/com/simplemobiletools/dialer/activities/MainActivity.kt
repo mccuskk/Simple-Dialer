@@ -72,6 +72,7 @@ private fun Activity.requestPermission(permission: String, requestCode: Int) {
 class MainActivity : SimpleActivity() {
     lateinit var client: Mqtt5AsyncClient
     lateinit var bluetoothAdapterName: String
+    lateinit var dialingReceiver: BroadcastReceiver
     lateinit var answeredReceiver: BroadcastReceiver
     lateinit var readyReceiver: BroadcastReceiver
 
@@ -151,7 +152,6 @@ class MainActivity : SimpleActivity() {
         promptEnableBluetooth()
 
         val answeredFilter = IntentFilter()
-        //adding some filters
         answeredFilter.addAction("co.kwest.www.callmanager.answered")
         answeredReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -169,7 +169,6 @@ class MainActivity : SimpleActivity() {
         registerReceiver(answeredReceiver, answeredFilter)
 
         val readyFilter = IntentFilter()
-        //adding some filters
         readyFilter.addAction("co.kwest.www.callmanager.ready")
         readyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -181,6 +180,19 @@ class MainActivity : SimpleActivity() {
             }
         }
         registerReceiver(readyReceiver, readyFilter)
+
+        val dialingFilter = IntentFilter()
+        dialingFilter.addAction("co.kwest.www.callmanager.dialing")
+        dialingReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                // End the call
+                client.publishWith()
+                    .topic("${bluetoothAdapterName}/phone")
+                    .payload("dialing".encodeToByteArray())
+                    .send()
+            }
+        }
+        registerReceiver(dialingReceiver, dialingFilter)
 
         asyncClient()
         hideTabs()
@@ -501,7 +513,7 @@ class MainActivity : SimpleActivity() {
 
     private fun refreshFragments() {
         contacts_fragment?.refreshItems()
-        favorites_fragment?.refreshItems()
+        cati_fragment?.refreshItems()
         recents_fragment?.refreshItems()
     }
 
@@ -599,16 +611,26 @@ class MainActivity : SimpleActivity() {
             .sslWithDefaultConfig()
             .automaticReconnectWithDefaultConfig()
             .simpleAuth()
-            .username("cati")
+            .username(bluetoothAdapterName)
             .password("3317b699-585c-49eb-8708-aa9700dd66f3".toByteArray())
             .applySimpleAuth()
             .addDisconnectedListener(object : MqttClientDisconnectedListener {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
+                    val intent = Intent()
+                    intent.action = "co.kwest.www.callmanager.mqtt"
+                    intent.putExtra("connected", false)
+                    this@MainActivity.sendBroadcast(intent)
+
                     TODO("Set Disconnected State")
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
                 override fun onConnected(context: MqttClientConnectedContext) {
+                    val intent = Intent()
+                    intent.action = "co.kwest.www.callmanager.mqtt"
+                    intent.putExtra("connected", true)
+                    this@MainActivity.sendBroadcast(intent)
+
                     client.subscribeWith()
                         .topicFilter("${bluetoothAdapterName}/call")
                         .qos(MqttQos.EXACTLY_ONCE)

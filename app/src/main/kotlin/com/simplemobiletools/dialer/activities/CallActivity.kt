@@ -384,6 +384,10 @@ class CallActivity : SimpleActivity() {
             else -> 0
         }
 
+        if (state == Call.STATE_DIALING) {
+            GlobalScope.launch { signalWhenDialing() }
+        }
+
         if (statusTextId != 0) {
             call_status_label.text = getString(statusTextId)
         }
@@ -468,6 +472,14 @@ class CallActivity : SimpleActivity() {
             delay(250L)
             val intent = Intent()
             intent.action = "co.kwest.www.callmanager.ready"
+            this@CallActivity.sendBroadcast(intent)
+        }
+    }
+
+    suspend fun signalWhenDialing() {
+        withContext(Dispatchers.Default) {
+            val intent = Intent()
+            intent.action = "co.kwest.www.callmanager.dialing"
             this@CallActivity.sendBroadcast(intent)
         }
     }

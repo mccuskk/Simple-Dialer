@@ -1,7 +1,12 @@
 package com.simplemobiletools.dialer.fragments
 
 import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Color
+import android.telecom.Call
 import android.util.AttributeSet
 import com.reddit.indicatorfastscroll.FastScrollItemIndicator
 import com.simplemobiletools.commons.adapters.MyRecyclerViewAdapter
@@ -26,20 +31,32 @@ import kotlinx.android.synthetic.main.fragment_recents.view.*
 import java.util.*
 
 class CatiFragment (context: Context, attributeSet: AttributeSet) : MyViewPagerFragment(context, attributeSet), RefreshItemsListener {
+    lateinit var mqttReceiver: BroadcastReceiver
+    var connected = false
 
     override fun setupFragment() {
         val placeholderResId = BluetoothAdapter.getDefaultAdapter().getName()
 
         cati_placeholder.text = placeholderResId
         //fragment_placeholder_2.beGone()
+
+        val mqttFilter = IntentFilter()
+        mqttFilter.addAction("co.kwest.www.callmanager.mqtt")
+        mqttReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                // Signal the call has been mqtt
+                connected = intent.getBooleanExtra("connected", false)
+                refreshItems()
+            }
+        }
+        context.registerReceiver(mqttReceiver, mqttFilter)
     }
 
     override fun setupColors(textColor: Int, primaryColor: Int, adjustedPrimaryColor: Int) {
-        cati_placeholder.setTextColor(textColor)
-
     }
 
     override fun refreshItems() {
+        cati_placeholder.setTextColor(Color.parseColor(if (connected) "#05ff50" else "#ffffff"))
     }
 
     override fun onSearchClosed() {
