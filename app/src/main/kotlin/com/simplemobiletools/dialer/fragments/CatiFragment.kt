@@ -38,6 +38,7 @@ class CatiFragment (context: Context, attributeSet: AttributeSet) : MyViewPagerF
         val placeholderResId = BluetoothAdapter.getDefaultAdapter().getName()
 
         cati_placeholder.text = placeholderResId
+        cati_placeholder.setTextColor(Color.parseColor(if (connected) "#05ff50" else "#ffffff"))
         //fragment_placeholder_2.beGone()
 
         val mqttFilter = IntentFilter()

@@ -605,7 +605,7 @@ class MainActivity : SimpleActivity() {
     fun asyncClient(): Mqtt5AsyncClient {
 
         client = Mqtt5Client.builder()
-            .identifier(UUID.randomUUID().toString())
+            .identifier(bluetoothAdapterName)
             .serverHost("mqtt.kwest.co")
             .serverPort(8883)
             .sslWithDefaultConfig()
@@ -620,8 +620,6 @@ class MainActivity : SimpleActivity() {
                     intent.action = "co.kwest.www.callmanager.mqtt"
                     intent.putExtra("connected", false)
                     this@MainActivity.sendBroadcast(intent)
-
-                    TODO("Set Disconnected State")
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
@@ -654,6 +652,7 @@ class MainActivity : SimpleActivity() {
             .buildAsync()
 
         client.connectWith()
+            .cleanStart(true)
             .send()
 
         return client
