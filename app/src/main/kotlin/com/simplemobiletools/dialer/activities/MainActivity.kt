@@ -10,6 +10,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
@@ -56,6 +57,7 @@ import kotlinx.android.synthetic.main.fragment_contacts.*
 import kotlinx.android.synthetic.main.fragment_favorites.*
 import kotlinx.android.synthetic.main.fragment_recents.*
 import java.util.*
+import kotlin.random.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
@@ -80,6 +82,7 @@ class MainActivity : SimpleActivity() {
     private var launchedDialer = false
     private var searchMenuItem: MenuItem? = null
     private var storedShowTabs = 0
+    private var connected = false
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
                                             grantResults: IntArray) {
@@ -566,6 +569,10 @@ class MainActivity : SimpleActivity() {
         }
     }
 
+    public fun connectionColor(): Int {
+        return Color.parseColor(if (connected) "#05ff50" else "#ffffff")
+    }
+
     // clear the missed calls count. Doesn't seem to always work, but having it can't hurt
     // found at https://android.googlesource.com/platform/packages/apps/Dialer/+/nougat-release/src/com/android/dialer/calllog/MissedCallNotifier.java#181
     private fun resetMissedCalls() {
@@ -604,8 +611,11 @@ class MainActivity : SimpleActivity() {
 
     fun asyncClient(): Mqtt5AsyncClient {
 
+        val i = kotlin.random.Random.nextInt(0, 100)
+        val id = "${bluetoothAdapterName}:${i}"
+
         client = Mqtt5Client.builder()
-            .identifier(bluetoothAdapterName)
+            .identifier(id)
             .serverHost("mqtt.kwest.co")
             .serverPort(8883)
             .sslWithDefaultConfig()
@@ -616,18 +626,14 @@ class MainActivity : SimpleActivity() {
             .applySimpleAuth()
             .addDisconnectedListener(object : MqttClientDisconnectedListener {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
-                    val intent = Intent()
-                    intent.action = "co.kwest.www.callmanager.mqtt"
-                    intent.putExtra("connected", false)
-                    this@MainActivity.sendBroadcast(intent)
+                    connected = false
+                    refreshFragments()
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
                 override fun onConnected(context: MqttClientConnectedContext) {
-                    val intent = Intent()
-                    intent.action = "co.kwest.www.callmanager.mqtt"
-                    intent.putExtra("connected", true)
-                    this@MainActivity.sendBroadcast(intent)
+                    connected = true
+                    refreshFragments()
 
                     client.subscribeWith()
                         .topicFilter("${bluetoothAdapterName}/call")

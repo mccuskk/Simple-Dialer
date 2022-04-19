@@ -19,6 +19,7 @@ import com.simplemobiletools.commons.helpers.SimpleContactsHelper
 import com.simplemobiletools.commons.models.RadioItem
 import com.simplemobiletools.commons.models.SimpleContact
 import com.simplemobiletools.dialer.R
+import com.simplemobiletools.dialer.activities.MainActivity
 import com.simplemobiletools.dialer.activities.SimpleActivity
 import com.simplemobiletools.dialer.adapters.ContactsAdapter
 import com.simplemobiletools.dialer.adapters.RecentCallsAdapter
@@ -31,33 +32,19 @@ import kotlinx.android.synthetic.main.fragment_recents.view.*
 import java.util.*
 
 class CatiFragment (context: Context, attributeSet: AttributeSet) : MyViewPagerFragment(context, attributeSet), RefreshItemsListener {
-    lateinit var mqttReceiver: BroadcastReceiver
-    var connected = false
 
     override fun setupFragment() {
         val placeholderResId = BluetoothAdapter.getDefaultAdapter().getName()
 
         cati_placeholder.text = placeholderResId
-        cati_placeholder.setTextColor(Color.parseColor(if (connected) "#05ff50" else "#ffffff"))
-        //fragment_placeholder_2.beGone()
-
-        val mqttFilter = IntentFilter()
-        mqttFilter.addAction("co.kwest.www.callmanager.mqtt")
-        mqttReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                // Signal the call has been mqtt
-                connected = intent.getBooleanExtra("connected", false)
-                refreshItems()
-            }
-        }
-        context.registerReceiver(mqttReceiver, mqttFilter)
+        cati_placeholder.setTextColor((activity as MainActivity).connectionColor())
     }
 
     override fun setupColors(textColor: Int, primaryColor: Int, adjustedPrimaryColor: Int) {
     }
 
     override fun refreshItems() {
-        cati_placeholder.setTextColor(Color.parseColor(if (connected) "#05ff50" else "#ffffff"))
+        cati_placeholder.setTextColor((activity as MainActivity).connectionColor())
     }
 
     override fun onSearchClosed() {
