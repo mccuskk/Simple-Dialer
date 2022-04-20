@@ -31,10 +31,7 @@ import androidx.core.view.MenuItemCompat
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.snackbar.Snackbar
 import com.hivemq.client.mqtt.datatypes.MqttQos
-import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedContext
-import com.hivemq.client.mqtt.lifecycle.MqttClientConnectedListener
-import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedContext
-import com.hivemq.client.mqtt.lifecycle.MqttClientDisconnectedListener
+import com.hivemq.client.mqtt.lifecycle.*
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5Client
 import com.simplemobiletools.commons.dialogs.ConfirmationDialog
@@ -56,7 +53,9 @@ import kotlinx.android.synthetic.main.fragment_cati.*
 import kotlinx.android.synthetic.main.fragment_contacts.*
 import kotlinx.android.synthetic.main.fragment_favorites.*
 import kotlinx.android.synthetic.main.fragment_recents.*
+import kotlinx.coroutines.*
 import java.util.*
+import java.util.concurrent.TimeUnit
 import kotlin.random.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
@@ -110,6 +109,11 @@ class MainActivity : SimpleActivity() {
         bluetoothManager.adapter
     }
 
+    override fun onDestroy() {
+        client.disconnect()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -151,7 +155,7 @@ class MainActivity : SimpleActivity() {
         val serviceIntent = Intent(this, BLECommService::class.java)
         ContextCompat.startForegroundService(this, serviceIntent)
 
-        bluetoothAdapterName = "${BluetoothAdapter.getDefaultAdapter().name}"
+        bluetoothAdapterName = BluetoothAdapter.getDefaultAdapter().name
         promptEnableBluetooth()
 
         val answeredFilter = IntentFilter()
@@ -609,17 +613,17 @@ class MainActivity : SimpleActivity() {
         startAboutActivity(R.string.app_name, licenses, BuildConfig.VERSION_NAME, faqItems, true)
     }
 
-    fun asyncClient(): Mqtt5AsyncClient {
+    fun asyncClient() {
 
-        val i = kotlin.random.Random.nextInt(0, 100)
-        val id = "${bluetoothAdapterName}:${i}"
+        /* Note that we must have added the bluetoothAdapterName with the password to the mosquitto server using
+         * mosquitto_passwd /etc/mosquitto/passwd <bluetoothAdapterName> and restarted it before we are good to go.
+         */
 
         client = Mqtt5Client.builder()
-            .identifier(id)
+            .identifier(bluetoothAdapterName)
             .serverHost("mqtt.kwest.co")
             .serverPort(8883)
             .sslWithDefaultConfig()
-            .automaticReconnectWithDefaultConfig()
             .simpleAuth()
             .username(bluetoothAdapterName)
             .password("3317b699-585c-49eb-8708-aa9700dd66f3".toByteArray())
@@ -628,6 +632,7 @@ class MainActivity : SimpleActivity() {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
                     connected = false
                     refreshFragments()
+                    context.reconnector.reconnect(context.source != MqttDisconnectSource.USER).delay((500 * context.reconnector.attempts).toLong(), TimeUnit.MILLISECONDS)
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
@@ -661,6 +666,6 @@ class MainActivity : SimpleActivity() {
             .cleanStart(true)
             .send()
 
-        return client
     }
+
 }
