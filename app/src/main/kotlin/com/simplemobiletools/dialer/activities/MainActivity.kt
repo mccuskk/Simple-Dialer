@@ -17,6 +17,7 @@ import android.graphics.drawable.Icon
 import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.os.Handler
+import android.os.PowerManager
 import android.provider.CallLog
 import android.provider.Settings
 import android.telecom.Call
@@ -30,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.MenuItemCompat
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.things.device.DeviceManager
 import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.lifecycle.*
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
@@ -44,10 +46,7 @@ import com.simplemobiletools.dialer.R
 import com.simplemobiletools.dialer.adapters.ViewPagerAdapter
 import com.simplemobiletools.dialer.extensions.config
 import com.simplemobiletools.dialer.fragments.MyViewPagerFragment
-import com.simplemobiletools.dialer.helpers.OPEN_DIAL_PAD_AT_LAUNCH
-import com.simplemobiletools.dialer.helpers.RecentsHelper
-import com.simplemobiletools.dialer.helpers.TAB_CATI
-import com.simplemobiletools.dialer.helpers.tabsList
+import com.simplemobiletools.dialer.helpers.*
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.fragment_cati.*
 import kotlinx.android.synthetic.main.fragment_contacts.*
@@ -56,6 +55,7 @@ import kotlinx.android.synthetic.main.fragment_recents.*
 import kotlinx.coroutines.*
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlin.Long.Companion.MAX_VALUE
 import kotlin.random.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
@@ -77,11 +77,14 @@ class MainActivity : SimpleActivity() {
     lateinit var answeredReceiver: BroadcastReceiver
     lateinit var readyReceiver: BroadcastReceiver
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private var isSearchOpen = false
     private var launchedDialer = false
     private var searchMenuItem: MenuItem? = null
     private var storedShowTabs = 0
     private var connected = false
+    private var lastDisconnected: Long = MAX_VALUE
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>,
                                             grantResults: IntArray) {
@@ -112,6 +115,10 @@ class MainActivity : SimpleActivity() {
     override fun onDestroy() {
         client.disconnect()
         super.onDestroy()
+        if (wakeLock?.isHeld == true) {
+            wakeLock!!.release()
+        }
+
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -155,6 +162,14 @@ class MainActivity : SimpleActivity() {
         val serviceIntent = Intent(this, BLECommService::class.java)
         ContextCompat.startForegroundService(this, serviceIntent)
 
+        val callNotificationManager by lazy { CallNotificationManager(this) }
+        callNotificationManager.setupNotification()
+
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "co.kwest.www.callmanager:wake_lock")
+        wakeLock!!.acquire(24 * 60 * MINUTE_SECONDS * 1000L)
+
+
         bluetoothAdapterName = BluetoothAdapter.getDefaultAdapter().name
         promptEnableBluetooth()
 
@@ -162,7 +177,7 @@ class MainActivity : SimpleActivity() {
         answeredFilter.addAction("co.kwest.www.callmanager.answered")
         answeredReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                // Signal the call has been answered
+                // Signal to CATI the call has been answered
                 val state = intent.getIntExtra("state", -1)
 
                 if (state == Call.STATE_ACTIVE) {
@@ -179,7 +194,7 @@ class MainActivity : SimpleActivity() {
         readyFilter.addAction("co.kwest.www.callmanager.ready")
         readyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                // End the call
+                // Signal to CATI that we are ready to dial another phone
                 client.publishWith()
                     .topic("${bluetoothAdapterName}/phone")
                     .payload("ready".encodeToByteArray())
@@ -192,7 +207,7 @@ class MainActivity : SimpleActivity() {
         dialingFilter.addAction("co.kwest.www.callmanager.dialing")
         dialingReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                // End the call
+                // Signal to CATI that we are dialing the phone
                 client.publishWith()
                     .topic("${bluetoothAdapterName}/phone")
                     .payload("dialing".encodeToByteArray())
@@ -201,7 +216,9 @@ class MainActivity : SimpleActivity() {
         }
         registerReceiver(dialingReceiver, dialingFilter)
 
-        asyncClient()
+        GlobalScope.launch {
+            asyncClient()
+        }
         hideTabs()
     }
 
@@ -613,7 +630,7 @@ class MainActivity : SimpleActivity() {
         startAboutActivity(R.string.app_name, licenses, BuildConfig.VERSION_NAME, faqItems, true)
     }
 
-    fun asyncClient() {
+    suspend fun asyncClient() =  withContext(Dispatchers.Default) {
 
         /* Note that we must have added the bluetoothAdapterName with the password to the mosquitto server using
          * mosquitto_passwd /etc/mosquitto/passwd <bluetoothAdapterName> and restarted it before we are good to go.
@@ -632,13 +649,21 @@ class MainActivity : SimpleActivity() {
                 override fun onDisconnected(context: MqttClientDisconnectedContext) {
                     connected = false
                     refreshFragments()
-                    context.reconnector.reconnect(context.source != MqttDisconnectSource.USER).delay((500 * context.reconnector.attempts).toLong(), TimeUnit.MILLISECONDS)
+                    context.reconnector.reconnect(context.source != MqttDisconnectSource.USER).delay((2500 + (500 * context.reconnector.attempts)).toLong(), TimeUnit.MILLISECONDS)
+                    lastDisconnected = System.currentTimeMillis()
                 }
             })
             .addConnectedListener(object : MqttClientConnectedListener {
                 override fun onConnected(context: MqttClientConnectedContext) {
                     connected = true
                     refreshFragments()
+
+                    if (System.currentTimeMillis() - lastDisconnected in 60000..120000) {
+                        client.publishWith()
+                            .topic("${bluetoothAdapterName}/phone")
+                            .payload("restart".encodeToByteArray())
+                            .send()
+                    }
 
                     client.subscribeWith()
                         .topicFilter("${bluetoothAdapterName}/call")
@@ -664,6 +689,7 @@ class MainActivity : SimpleActivity() {
 
         client.connectWith()
             .cleanStart(true)
+            .keepAlive(60)
             .send()
 
     }

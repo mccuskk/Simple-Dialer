@@ -61,7 +61,7 @@ class CallNotificationManager(private val context: Context) {
             val contentTextId = when (callState) {
                 Call.STATE_RINGING -> R.string.is_calling
                 Call.STATE_DIALING -> R.string.dialing
-                Call.STATE_DISCONNECTED -> R.string.call_ended
+                Call.STATE_DISCONNECTED -> R.string.ready
                 Call.STATE_DISCONNECTING -> R.string.call_ending
                 else -> R.string.ongoing_call
             }

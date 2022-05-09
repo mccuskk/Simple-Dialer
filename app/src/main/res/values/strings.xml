@@ -48,6 +48,7 @@
     <string name="show_dialpad">Show dialpad</string>
     <string name="hide_dialpad">Hide dialpad</string>
     <string name="end_call">End call</string>
+    <string name="ready" translatable="false">Ready</string>
 
     <!-- Speed dial -->
     <string name="speed_dial">Speed dial</string>
