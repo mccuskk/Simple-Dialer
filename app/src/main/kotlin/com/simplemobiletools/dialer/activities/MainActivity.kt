@@ -78,6 +78,7 @@ class MainActivity : SimpleActivity() {
     lateinit var readyReceiver: BroadcastReceiver
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var current_state = ""
 
     private var isSearchOpen = false
     private var launchedDialer = false
@@ -181,9 +182,10 @@ class MainActivity : SimpleActivity() {
                 val state = intent.getIntExtra("state", -1)
 
                 if (state == Call.STATE_ACTIVE) {
+                    current_state = "answered"
                     client.publishWith()
                         .topic("${bluetoothAdapterName}/phone")
-                        .payload("answered".encodeToByteArray())
+                        .payload(current_state.encodeToByteArray())
                         .send()
                 }
             }
@@ -195,10 +197,13 @@ class MainActivity : SimpleActivity() {
         readyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // Signal to CATI that we are ready to dial another phone
-                client.publishWith()
-                    .topic("${bluetoothAdapterName}/phone")
-                    .payload("ready".encodeToByteArray())
-                    .send()
+                if (!current_state.equals("ready")) {
+                    current_state = "ready"
+                    client.publishWith()
+                        .topic("${bluetoothAdapterName}/phone")
+                        .payload(current_state.encodeToByteArray())
+                        .send()
+                }
             }
         }
         registerReceiver(readyReceiver, readyFilter)
@@ -208,9 +213,11 @@ class MainActivity : SimpleActivity() {
         dialingReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // Signal to CATI that we are dialing the phone
+                current_state = "dialing"
+
                 client.publishWith()
                     .topic("${bluetoothAdapterName}/phone")
-                    .payload("dialing".encodeToByteArray())
+                    .payload(current_state.encodeToByteArray())
                     .send()
             }
         }
