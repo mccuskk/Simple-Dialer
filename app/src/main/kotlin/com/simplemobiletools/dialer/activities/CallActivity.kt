@@ -12,6 +12,7 @@ import android.graphics.drawable.RippleDrawable
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.telecom.Call
 import android.telecom.CallAudioState
@@ -54,7 +55,7 @@ class CallActivity : SimpleActivity() {
     private var proximityWakeLock: PowerManager.WakeLock? = null
     private var callDuration = 0
     private val callContactAvatarHelper by lazy { CallContactAvatarHelper(this) }
-    private val callDurationHelper by lazy { (application as App).callDurationHelper }
+    private val callDurationHandler = Handler(Looper.getMainLooper())
     private var dragDownX = 0f
     private var stopAnimation = false
 
@@ -213,7 +214,7 @@ class CallActivity : SimpleActivity() {
         }
 
         var lock = false
-        call_draggable.setOnTouchListener { v, event ->
+        call_draggable.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     dragDownX = event.x
@@ -411,20 +412,23 @@ class CallActivity : SimpleActivity() {
         initProximitySensor()
         incoming_call_holder.beGone()
         ongoing_call_holder.beVisible()
-        callDurationHelper.onDurationChange {
-            callDuration = it
-            runOnUiThread {
-                if (!isCallEnded) {
-                    call_status_label.text = callDuration.getFormattedDuration()
-                }
-            }
-        }
+        callDurationHandler.post(updateCallDurationTask)
     }
 
     private fun showPhoneAccountPicker() {
         if (callContact != null) {
             getHandleToUse(intent, callContact!!.number) { handle ->
                 CallManager.call?.phoneAccountSelected(handle, false)
+            }
+        }
+    }
+
+    private val updateCallDurationTask = object : Runnable {
+        override fun run() {
+            callDuration = CallManager.getCallDuration()
+            if (!isCallEnded) {
+                call_status_label.text = callDuration.getFormattedDuration()
+                callDurationHandler.postDelayed(this, 1000)
             }
         }
     }
@@ -450,7 +454,7 @@ class CallActivity : SimpleActivity() {
         if (callDuration > 0) {
             runOnUiThread {
                 call_status_label.text = "${callDuration.getFormattedDuration()} (${getString(R.string.call_ended)})"
-                Handler().postDelayed({
+                Handler(Looper.getMainLooper()).postDelayed({
                     finishAndRemoveTask()
                 }, 3000)
             }

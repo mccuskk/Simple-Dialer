@@ -10,8 +10,7 @@ data class RecentCall(
 ) {
     fun doesContainPhoneNumber(text: String): Boolean {
         val normalizedText = text.normalizePhoneNumber()
-        return PhoneNumberUtils.compare(phoneNumber.normalizePhoneNumber(), normalizedText) ||
-            phoneNumber.contains(text) ||
+        return phoneNumber.contains(text) ||
             phoneNumber.normalizePhoneNumber().contains(normalizedText) ||
             phoneNumber.contains(normalizedText)
     }

@@ -2,17 +2,14 @@ package com.simplemobiletools.dialer.dialogs
 
 import androidx.appcompat.app.AlertDialog
 import com.reddit.indicatorfastscroll.FastScrollItemIndicator
-import com.simplemobiletools.commons.extensions.getAdjustedPrimaryColor
-import com.simplemobiletools.commons.extensions.getColorStateList
-import com.simplemobiletools.commons.extensions.getContrastColor
-import com.simplemobiletools.commons.extensions.setupDialogStuff
 import com.simplemobiletools.commons.models.SimpleContact
+import com.simplemobiletools.commons.extensions.*
 import com.simplemobiletools.dialer.R
 import com.simplemobiletools.dialer.activities.SimpleActivity
 import com.simplemobiletools.dialer.adapters.ContactsAdapter
-import com.simplemobiletools.dialer.extensions.config
 import kotlinx.android.synthetic.main.dialog_select_contact.view.*
 import java.util.*
+
 
 class SelectContactDialog(val activity: SimpleActivity, contacts: ArrayList<SimpleContact>, val callback: (selectedContact: SimpleContact) -> Unit) {
     private var dialog: AlertDialog? = null
@@ -20,10 +17,10 @@ class SelectContactDialog(val activity: SimpleActivity, contacts: ArrayList<Simp
 
     init {
         view.apply {
-            letter_fastscroller.textColor = context.config.textColor.getColorStateList()
+            letter_fastscroller.textColor = context.getProperTextColor().getColorStateList()
             letter_fastscroller_thumb.setupWithFastScroller(letter_fastscroller)
-            letter_fastscroller_thumb.textColor = context.getAdjustedPrimaryColor().getContrastColor()
-            letter_fastscroller_thumb.thumbColor = context.getAdjustedPrimaryColor().getColorStateList()
+            letter_fastscroller_thumb.textColor = context.getProperPrimaryColor().getContrastColor()
+            letter_fastscroller_thumb.thumbColor = context.getProperPrimaryColor().getColorStateList()
 
             letter_fastscroller.setupWithRecyclerView(select_contact_list, { position ->
                 try {

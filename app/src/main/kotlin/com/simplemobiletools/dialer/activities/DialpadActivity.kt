@@ -98,11 +98,11 @@ class DialpadActivity : SimpleActivity() {
         SimpleContactsHelper(this).getAvailableContacts(false) { gotContacts(it) }
         disableKeyboardPopping()
 
-        val adjustedPrimaryColor = getAdjustedPrimaryColor()
+        val properPrimaryColor = getProperPrimaryColor()
         val callIconId = if (areMultipleSIMsAvailable()) {
-            val callIcon = resources.getColoredDrawableWithColor(R.drawable.ic_phone_two_vector, adjustedPrimaryColor.getContrastColor())
+            val callIcon = resources.getColoredDrawableWithColor(R.drawable.ic_phone_two_vector, properPrimaryColor.getContrastColor())
             dialpad_call_two_button.setImageDrawable(callIcon)
-            dialpad_call_two_button.background.applyColorFilter(adjustedPrimaryColor)
+            dialpad_call_two_button.background.applyColorFilter(properPrimaryColor)
             dialpad_call_two_button.beVisible()
             dialpad_call_two_button.setOnClickListener {
                 initCall(dialpad_input.value, 1)
@@ -113,21 +113,21 @@ class DialpadActivity : SimpleActivity() {
             R.drawable.ic_phone_vector
         }
 
-        val callIcon = resources.getColoredDrawableWithColor(callIconId, adjustedPrimaryColor.getContrastColor())
+        val callIcon = resources.getColoredDrawableWithColor(callIconId, properPrimaryColor.getContrastColor())
         dialpad_call_button.setImageDrawable(callIcon)
-        dialpad_call_button.background.applyColorFilter(adjustedPrimaryColor)
+        dialpad_call_button.background.applyColorFilter(properPrimaryColor)
 
-        letter_fastscroller.textColor = config.textColor.getColorStateList()
-        letter_fastscroller.pressedTextColor = adjustedPrimaryColor
+        letter_fastscroller.textColor = properPrimaryColor.getColorStateList()
+        letter_fastscroller.pressedTextColor = properPrimaryColor
         letter_fastscroller_thumb.setupWithFastScroller(letter_fastscroller)
-        letter_fastscroller_thumb.textColor = adjustedPrimaryColor.getContrastColor()
-        letter_fastscroller_thumb.thumbColor = adjustedPrimaryColor.getColorStateList()
+        letter_fastscroller_thumb.textColor = properPrimaryColor.getContrastColor()
+        letter_fastscroller_thumb.thumbColor = properPrimaryColor.getColorStateList()
     }
 
     override fun onResume() {
         super.onResume()
         updateTextColors(dialpad_holder)
-        dialpad_clear_char.applyColorFilter(config.textColor)
+        dialpad_clear_char.applyColorFilter(getProperTextColor())
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -223,7 +223,7 @@ class DialpadActivity : SimpleActivity() {
 
             if (hasRussianLocale) {
                 var currConvertedName = ""
-                convertedName.toLowerCase().forEach { char ->
+                convertedName.lowercase().forEach { char ->
                     val convertedChar = russianCharsMap.getOrElse(char) { char }
                     currConvertedName += convertedChar
                 }
@@ -239,7 +239,7 @@ class DialpadActivity : SimpleActivity() {
             try {
                 val name = filtered[position].name
                 val character = if (name.isNotEmpty()) name.substring(0, 1) else ""
-                FastScrollItemIndicator.Text(character.toUpperCase(Locale.getDefault()))
+                FastScrollItemIndicator.Text(character.uppercase(Locale.getDefault()))
             } catch (e: Exception) {
                 FastScrollItemIndicator.Text("")
             }

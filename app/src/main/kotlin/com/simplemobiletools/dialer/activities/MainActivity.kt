@@ -31,7 +31,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.MenuItemCompat
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.things.device.DeviceManager
 import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.lifecycle.*
 import com.hivemq.client.mqtt.mqtt5.Mqtt5AsyncClient
@@ -43,6 +42,10 @@ import com.simplemobiletools.commons.models.FAQItem
 import com.simplemobiletools.dialer.BLECommService
 import com.simplemobiletools.dialer.BuildConfig
 import com.simplemobiletools.dialer.R
+import com.simplemobiletools.dialer.R.drawable
+import com.simplemobiletools.dialer.R.id
+import com.simplemobiletools.dialer.R.layout
+import com.simplemobiletools.dialer.R.string
 import com.simplemobiletools.dialer.adapters.ViewPagerAdapter
 import com.simplemobiletools.dialer.extensions.config
 import com.simplemobiletools.dialer.fragments.MyViewPagerFragment
@@ -50,13 +53,14 @@ import com.simplemobiletools.dialer.helpers.*
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.fragment_cati.*
 import kotlinx.android.synthetic.main.fragment_contacts.*
-import kotlinx.android.synthetic.main.fragment_favorites.*
 import kotlinx.android.synthetic.main.fragment_recents.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.Long.Companion.MAX_VALUE
-import kotlin.random.*
 
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
@@ -124,7 +128,7 @@ class MainActivity : SimpleActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(layout.activity_main)
 
         if (ContextCompat.checkSelfPermission(this@MainActivity,
                 Manifest.permission.ACCESS_FINE_LOCATION) !=
@@ -148,12 +152,12 @@ class MainActivity : SimpleActivity() {
             checkContactPermissions()
 
             if (!Settings.canDrawOverlays(this)) {
-                val snackbar = Snackbar.make(main_holder, R.string.allow_displaying_over_other_apps, Snackbar.LENGTH_INDEFINITE).setAction(R.string.ok) {
+                val snackbar = Snackbar.make(main_holder, string.allow_displaying_over_other_apps, Snackbar.LENGTH_INDEFINITE).setAction(string.ok) {
                     startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
                 }
-                snackbar.setBackgroundTint(config.backgroundColor.darkenColor())
-                snackbar.setTextColor(config.textColor)
-                snackbar.setActionTextColor(config.textColor)
+                snackbar.setBackgroundTint(getProperBackgroundColor().darkenColor())
+                snackbar.setTextColor(getProperTextColor())
+                snackbar.setActionTextColor(getProperTextColor())
                 snackbar.show()
             }
         } else {
@@ -236,24 +240,24 @@ class MainActivity : SimpleActivity() {
 
     override fun onResume() {
         super.onResume()
-        val adjustedPrimaryColor = getAdjustedPrimaryColor()
-        val dialpadIcon = resources.getColoredDrawableWithColor(R.drawable.ic_dialpad_vector, adjustedPrimaryColor.getContrastColor())
+        val properPrimaryColor = getProperPrimaryColor()
+        val dialpadIcon = resources.getColoredDrawableWithColor(drawable.ic_dialpad_vector, properPrimaryColor.getContrastColor())
         main_dialpad_button.apply {
             setImageDrawable(dialpadIcon)
-            background.applyColorFilter(adjustedPrimaryColor)
+            background.applyColorFilter(properPrimaryColor)
         }
 
-        main_tabs_holder.setBackgroundColor(config.backgroundColor)
-        main_tabs_holder.setSelectedTabIndicatorColor(adjustedPrimaryColor)
+        main_tabs_holder.setBackgroundColor(getProperBackgroundColor())
+        main_tabs_holder.setSelectedTabIndicatorColor(properPrimaryColor)
 
         if (viewpager.adapter != null) {
             getInactiveTabIndexes(viewpager.currentItem).forEach {
-                main_tabs_holder.getTabAt(it)?.icon?.applyColorFilter(config.textColor)
+                main_tabs_holder.getTabAt(it)?.icon?.applyColorFilter(getProperTextColor())
             }
 
-            main_tabs_holder.getTabAt(viewpager.currentItem)?.icon?.applyColorFilter(adjustedPrimaryColor)
+            main_tabs_holder.getTabAt(viewpager.currentItem)?.icon?.applyColorFilter(properPrimaryColor)
             getAllFragments().forEach {
-                it?.setupColors(config.textColor, config.primaryColor, getAdjustedPrimaryColor())
+                it?.setupColors(getProperTextColor(), getProperPrimaryColor(), getProperPrimaryColor())
             }
         }
 
@@ -280,7 +284,7 @@ class MainActivity : SimpleActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu, menu)
         menu.apply {
-            findItem(R.id.clear_call_history).isVisible = getCurrentFragment() == recents_fragment
+            findItem(id.clear_call_history).isVisible = getCurrentFragment() == recents_fragment
 
             setupSearch(this)
             updateMenuItemColors(this)
@@ -290,9 +294,9 @@ class MainActivity : SimpleActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.clear_call_history -> clearCallHistory()
-            R.id.settings -> launchSettings()
-            R.id.about -> launchAbout()
+            id.clear_call_history -> clearCallHistory()
+            id.settings -> launchSettings()
+            id.about -> launchAbout()
             else -> return super.onOptionsItemSelected(item)
         }
         return true
@@ -326,11 +330,11 @@ class MainActivity : SimpleActivity() {
 
     private fun setupSearch(menu: Menu) {
         val searchManager = getSystemService(Context.SEARCH_SERVICE) as SearchManager
-        searchMenuItem = menu.findItem(R.id.search)
+        searchMenuItem = menu.findItem(id.search)
         (searchMenuItem!!.actionView as SearchView).apply {
             setSearchableInfo(searchManager.getSearchableInfo(componentName))
             isSubmitButtonEnabled = false
-            queryHint = getString(R.string.search)
+            queryHint = getString(string.search)
             setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String) = false
 
@@ -360,7 +364,7 @@ class MainActivity : SimpleActivity() {
     }
 
     private fun clearCallHistory() {
-        ConfirmationDialog(this, "", R.string.clear_history_confirmation) {
+        ConfirmationDialog(this, "", string.clear_history_confirmation) {
             RecentsHelper(this).removeAllRecentCalls(this) {
                 runOnUiThread {
                     recents_fragment?.refreshItems()
@@ -383,11 +387,10 @@ class MainActivity : SimpleActivity() {
         }
     }
 
-    @SuppressLint("NewApi")
     private fun getLaunchDialpadShortcut(appIconColor: Int): ShortcutInfo {
-        val newEvent = getString(R.string.dialpad)
-        val drawable = resources.getDrawable(R.drawable.shortcut_dialpad)
-        (drawable as LayerDrawable).findDrawableByLayerId(R.id.shortcut_dialpad_background).applyColorFilter(appIconColor)
+        val newEvent = getString(string.dialpad)
+        val drawable = resources.getDrawable(drawable.shortcut_dialpad, applicationContext.theme)
+        (drawable as LayerDrawable).findDrawableByLayerId(id.shortcut_dialpad_background).applyColorFilter(appIconColor)
         val bmp = drawable.convertToBitmap()
 
         val intent = Intent(this, DialpadActivity::class.java)
@@ -403,23 +406,23 @@ class MainActivity : SimpleActivity() {
     private fun setupTabColors() {
         val lastUsedPage = getDefaultTab()
         main_tabs_holder.apply {
-            background = ColorDrawable(config.backgroundColor)
-            setSelectedTabIndicatorColor(getAdjustedPrimaryColor())
+            background = ColorDrawable(getProperBackgroundColor())
+            setSelectedTabIndicatorColor(getProperPrimaryColor())
             getTabAt(lastUsedPage)?.select()
-            getTabAt(lastUsedPage)?.icon?.applyColorFilter(getAdjustedPrimaryColor())
+            getTabAt(lastUsedPage)?.icon?.applyColorFilter(getProperPrimaryColor())
 
             getInactiveTabIndexes(lastUsedPage).forEach {
-                getTabAt(it)?.icon?.applyColorFilter(config.textColor)
+                getTabAt(it)?.icon?.applyColorFilter(getProperTextColor())
             }
         }
 
         main_tabs_holder.onTabSelectionChanged(
             tabUnselectedAction = {
-                it.icon?.applyColorFilter(config.textColor)
+                it.icon?.applyColorFilter(getProperTextColor())
             },
             tabSelectedAction = {
                 viewpager.currentItem = it.position
-                it.icon?.applyColorFilter(getAdjustedPrimaryColor())
+                it.icon?.applyColorFilter(getProperPrimaryColor())
             }
         )
     }
@@ -502,19 +505,19 @@ class MainActivity : SimpleActivity() {
 
     private fun getTabIcon(position: Int): Drawable {
         val drawableId = when (position) {
-            0 -> R.drawable.ic_person_vector
-            1 -> R.drawable.ic_star_vector
-            else -> R.drawable.ic_clock_vector
+            0 -> drawable.ic_person_vector
+            1 -> drawable.ic_star_vector
+            else -> drawable.ic_clock_vector
         }
 
-        return resources.getColoredDrawableWithColor(drawableId, config.textColor)
+        return resources.getColoredDrawableWithColor(drawableId, getProperTextColor())
     }
 
     private fun getTabContentDescription(position: Int): String {
         val stringId = when (position) {
-            0 -> R.string.contacts_tab
-            1 -> R.string.cati_tab
-            else -> R.string.call_history_tab
+            0 -> string.contacts_tab
+            1 -> string.cati_tab
+            else -> string.call_history_tab
         }
 
         return resources.getString(stringId)
@@ -628,13 +631,13 @@ class MainActivity : SimpleActivity() {
         val licenses = LICENSE_GLIDE or LICENSE_INDICATOR_FAST_SCROLL
 
         val faqItems = arrayListOf(
-            FAQItem(R.string.faq_2_title_commons, R.string.faq_2_text_commons),
-            FAQItem(R.string.faq_6_title_commons, R.string.faq_6_text_commons),
-            FAQItem(R.string.faq_7_title_commons, R.string.faq_7_text_commons),
-            FAQItem(R.string.faq_9_title_commons, R.string.faq_9_text_commons)
+            FAQItem(string.faq_2_title_commons, string.faq_2_text_commons),
+            FAQItem(string.faq_6_title_commons, string.faq_6_text_commons),
+            FAQItem(string.faq_7_title_commons, string.faq_7_text_commons),
+            FAQItem(string.faq_9_title_commons, string.faq_9_text_commons)
         )
 
-        startAboutActivity(R.string.app_name, licenses, BuildConfig.VERSION_NAME, faqItems, true)
+        startAboutActivity(string.app_name, licenses, BuildConfig.VERSION_NAME, faqItems, true)
     }
 
     suspend fun asyncClient() =  withContext(Dispatchers.Default) {
