@@ -82,7 +82,7 @@ class MainActivity : SimpleActivity() {
     lateinit var readyReceiver: BroadcastReceiver
 
     private var wakeLock: PowerManager.WakeLock? = null
-    private var current_state = ""
+    private var currentState = ""
 
     private var isSearchOpen = false
     private var launchedDialer = false
@@ -174,8 +174,8 @@ class MainActivity : SimpleActivity() {
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "co.kwest.www.callmanager:wake_lock")
         wakeLock!!.acquire(24 * 60 * MINUTE_SECONDS * 1000L)
 
-
-        bluetoothAdapterName = BluetoothAdapter.getDefaultAdapter().name
+        val bluetoothManager = this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothAdapterName = bluetoothManager.getAdapter().name
         promptEnableBluetooth()
 
         val answeredFilter = IntentFilter()
@@ -186,10 +186,10 @@ class MainActivity : SimpleActivity() {
                 val state = intent.getIntExtra("state", -1)
 
                 if (state == Call.STATE_ACTIVE) {
-                    current_state = "answered"
+                    currentState = "answered"
                     client.publishWith()
                         .topic("${bluetoothAdapterName}/phone")
-                        .payload(current_state.encodeToByteArray())
+                        .payload(currentState.encodeToByteArray())
                         .send()
                 }
             }
@@ -201,11 +201,11 @@ class MainActivity : SimpleActivity() {
         readyReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // Signal to CATI that we are ready to dial another phone
-                if (!current_state.equals("ready")) {
-                    current_state = "ready"
+                if (currentState != "ready") {
+                    currentState = "ready"
                     client.publishWith()
                         .topic("${bluetoothAdapterName}/phone")
-                        .payload(current_state.encodeToByteArray())
+                        .payload(currentState.encodeToByteArray())
                         .send()
                 }
             }
@@ -217,11 +217,11 @@ class MainActivity : SimpleActivity() {
         dialingReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 // Signal to CATI that we are dialing the phone
-                current_state = "dialing"
+                currentState = "dialing"
 
                 client.publishWith()
                     .topic("${bluetoothAdapterName}/phone")
-                    .payload(current_state.encodeToByteArray())
+                    .payload(currentState.encodeToByteArray())
                     .send()
             }
         }
@@ -677,7 +677,7 @@ class MainActivity : SimpleActivity() {
 
                     client.subscribeWith()
                         .topicFilter("${bluetoothAdapterName}/call")
-                        .qos(MqttQos.EXACTLY_ONCE)
+                        .qos(MqttQos.AT_MOST_ONCE)
                         .callback {
                              val phone = PhoneNumberUtils.formatNumber(it.payloadAsBytes.decodeToString(), Locale.getDefault().country)
                              this@MainActivity.launchCallIntent(phone)
@@ -686,7 +686,7 @@ class MainActivity : SimpleActivity() {
 
                     client.subscribeWith()
                         .topicFilter("${bluetoothAdapterName}/hangup")
-                        .qos(MqttQos.EXACTLY_ONCE)
+                        .qos(MqttQos.AT_MOST_ONCE)
                         .callback {
                             val intent = Intent()
                             intent.action = "co.kwest.www.callmanager.hangup"

@@ -10,17 +10,24 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     compileSdkVersion 32
+    namespace "com.simplemobiletools.dialer"
 
     defaultConfig {
-        applicationId "com.simplemobiletools.dialer"
-        minSdkVersion 23
-        targetSdkVersion 30
+        minSdk 28
+        targetSdkVersion 31
         versionCode 34
         versionName "5.11.5"
         setProperty("archivesBaseName", "dialer")
+        signingConfig signingConfigs.debug
     }
 
     signingConfigs {
+        debug {
+            storeFile file('/home/server/StudioProjects/Simple-Dialer/key-store.jks')
+            storePassword 'st0ptk1dz'
+            keyAlias 'dialer'
+            keyPassword 'st0ptk1dz'
+        }
         if (keystorePropertiesFile.exists()) {
             release {
                 keyAlias keystoreProperties['keyAlias']
@@ -50,7 +57,7 @@ android {
             applicationIdSuffix ".debug"
         }
         release {
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
